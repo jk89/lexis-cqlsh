@@ -1,3 +1,3 @@
-scylla-driver==3.26.9
+lexis-driver @ git+https://github.com/jk89/lexis-python-driver
 PyYAML>=6.0.1
 click>=8.1.3

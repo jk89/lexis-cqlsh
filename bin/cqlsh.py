@@ -58,7 +58,7 @@ try:
 except ImportError:
     pass
 
-CQL_LIB_PREFIX = 'scylla-driver-'
+CQL_LIB_PREFIX = 'lexis-driver-'
 
 CASSANDRA_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..')
 CASSANDRA_CQL_HTML_FALLBACK = 'https://cassandra.apache.org/doc/latest/cql/index.html'
@@ -639,7 +639,12 @@ class Shell(cmd.Cmd):
     def show_replicas(self, token_value, keyspace=None):
         ks = self.current_keyspace if keyspace is None else keyspace
         token_map = self.conn.metadata.token_map
-        nodes = token_map.get_replicas(ks, token_map.token_class(token_value))
+        if token_value.lower().startswith('0x'):
+            # Byte string tokens (ByteOrderedPartitioner, Lexis) are hex blob literals.
+            token = token_map.token_class.from_string(token_value[2:])
+        else:
+            token = token_map.token_class(token_value)
+        nodes = token_map.get_replicas(ks, token)
         addresses = [x.address for x in nodes]
         print(f"{addresses}")
 

@@ -1,75 +1,29 @@
-# scylla-cqlsh
+# lexis-cqlsh
 
-Command line tool to connect to [scylladb](http://www.scylladb.com) (or Apache Cassandra)
+cqlsh for [Lexis](https://github.com/jk89/lexis), a fork of ScyllaDB that
+replaces the Murmur3 partitioner with byte-ordered partitioning, built on
+tablets. In Lexis the token of a partition is an order-preserving encoding of
+its partition key.
 
-A fork of the cqlsh tool from https://github.com/apache/cassandra
+`token()` values print as hex blobs. `COPY TO` and `COPY FROM` split work by
+Lexis token ranges, `BEGINTOKEN` and `ENDTOKEN` take hex tokens, and
+`SHOW REPLICAS` takes a hex token. Use it with
+[lexis-python-driver](https://github.com/jk89/lexis-python-driver).
 
-![Libraries.io dependency status for latest release](https://img.shields.io/librariesio/release/pypi/scylla-cqlsh)
-![GitHub branch checks state](https://img.shields.io/github/checks-status/scylladb/scylla-cqlsh/master)
-![PyPI](https://img.shields.io/pypi/v/scylla-cqlsh)
+Docker image, connecting to a Lexis node:
 
-# Quickstart
+    docker run -it --rm 0x6a6f6e6e79/lexis-cqlsh <host>
 
-```bash
-pip install scylla-cqlsh
+## Installation
 
-cqlsh ${SCYLLA_HOST} -e 'SELECT * FROM system.local'
+    pip install git+https://github.com/jk89/lexis-cqlsh
 
-# or just using it interactively
-cqlsh ${SCYLLA_HOST} 
+This also installs lexis-python-driver. Or run it from Docker, as above.
 
-# or using it with scylla-cloud
-cqlsh --cloudconf [path to connection bundle downloaded]
+## Base and licence
 
-# running with docker image interactively
-docker run -it scylladb/scylla-cqlsh ${SCYLLA_HOST}
-```
+Forked from ScyllaDB's scylla-cqlsh at commit `b09bc79` (after
+`v6.0.22-scylla`). Licensed under the Apache License 2.0
+([LICENSE.txt](LICENSE.txt)).
 
-
-
-# Contributing
-
-Feel free to open a PR/issues with suggestion and improvement
-Try covering you suggested change with a test, and the instruction 
-for running tests are below
-
-## Testing
-
-Dependent 
-* python 2.7/3.x (recommend virtualenv)
-* minimum java8
-
-```bash
-pip install -e .
-pip install -r pylib/requirements.txt
-
-# run scylla with docker
-docker run  -d scylladb/scylla:latest --cluster-name test
-
-export DOCKER_ID=$(docker run -d scylladb/scylla:latest --cluster-name test)
-export CQL_TEST_HOST=$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' ${DOCKER_ID})
-while ! nc -z ${CQL_TEST_HOST} 9042; do   
-  sleep 0.1 # wait for 1/10 of the second before check again
-done
-          
- 
-# run scylla with CCM
-ccm create cqlsh_cluster -n 1 --scylla --version unstable/master:latest
-ccm start
-
-pytest
-```
-
-
-## Creation of the repo
-
-A reference on how this we forked out of cassandra repo
-So we can repeat the process if we want to bring change back it
-
-```bash
-git clone  -b trunk --single-branch git@github.com:apache/cassandra.git
-sudo apt-get install git-filter-repo
-cd cassandra
-
-git filter-repo --path bin/cqlsh --path bin/cqlsh.py --path pylib/
-```
+The upstream README is kept unchanged in [README_SCYLLA.md](README_SCYLLA.md).

@@ -89,7 +89,7 @@ ar.reloc_add('install.sh')
 ar.reloc_add('build/debian/debian', arcname='debian')
 
 
-# clear scylla-driver out of the package
+# clear lexis-driver out of the package
 # we assume that scylla-python3 already have it (and all it's .so are relocatable,
 # and pointing the correct lib folder)
 cqlsh_bin = pathlib.Path('bin/cqlsh').resolve()

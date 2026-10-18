@@ -50,9 +50,9 @@ def get_extensions():
 
 
 setup(
-    name="scylla-cqlsh",
+    name="lexis-cqlsh",
     install_requires=[
-        "scylla-driver >= 3.25.10",
+        "lexis-driver @ git+https://github.com/jk89/lexis-python-driver",
     ],
     ext_modules=get_extensions(),
     license="Apache",

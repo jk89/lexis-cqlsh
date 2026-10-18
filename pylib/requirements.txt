@@ -1,4 +1,4 @@
-scylla-driver
+lexis-driver @ git+https://github.com/jk89/lexis-python-driver
 # Used ccm version is tracked by cassandra-test branch in ccm repo. Please create a PR there for fixes or upgrades to new releases.
 https://github.com/scylladb/scylla-ccm/archive/master.zip
 coverage

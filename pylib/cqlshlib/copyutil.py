@@ -633,6 +633,29 @@ class ExportWriter(object):
             self.current_dest.output.write(data)
 
 
+def is_byte_token_partitioner(partitioner):
+    """ Partitioners whose tokens are byte strings (CQL blob literals): ByteOrderedPartitioner, Lexis. """
+    return partitioner is not None and partitioner.endswith('ByteOrderedPartitioner')
+
+
+def parse_token(partitioner, token_string):
+    """ Parses a BEGINTOKEN/ENDTOKEN option: an integer, or hex bytes (optionally 0x-prefixed) for byte tokens. """
+    if not token_string:
+        return None
+    if is_byte_token_partitioner(partitioner):
+        if token_string[:2].lower() == '0x':
+            token_string = token_string[2:]
+        return bytes.fromhex(token_string)
+    return int(token_string)
+
+
+def format_token(token):
+    """ A token as a CQL literal. """
+    if isinstance(token, bytes):
+        return '0x' + token.hex()
+    return str(token)
+
+
 class ExportTask(CopyTask):
     """
     A class that exports data to .csv by instantiating one or more processes that work in parallel (ExportProcess).
@@ -641,8 +664,9 @@ class ExportTask(CopyTask):
         CopyTask.__init__(self, shell, ks, table, columns, fname, opts, protocol_version, config_file, 'to')
 
         options = self.options
-        self.begin_token = int(options.copy['begintoken']) if options.copy['begintoken'] else None
-        self.end_token = int(options.copy['endtoken']) if options.copy['endtoken'] else None
+        partitioner = shell.conn.metadata.partitioner
+        self.begin_token = parse_token(partitioner, options.copy['begintoken'])
+        self.end_token = parse_token(partitioner, options.copy['endtoken'])
         self.writer = ExportWriter(fname, shell, columns, options)
 
     def run(self):
@@ -735,11 +759,11 @@ class ExportTask(CopyTask):
             return {'hosts': tuple(hosts), 'attempts': 0, 'rows': 0, 'workerno': -1}
 
         if begin_token and begin_token < min_token:
-            shell.printerr('Begin token %d must be bigger or equal to min token %d' % (begin_token, min_token))
+            shell.printerr('Begin token %s must be bigger or equal to min token %s' % (format_token(begin_token), format_token(min_token)))
             return ranges
 
         if begin_token and end_token and begin_token > end_token:
-            shell.printerr('Begin token %d must be smaller than end token %d' % (begin_token, end_token))
+            shell.printerr('Begin token %s must be smaller than end token %s' % (format_token(begin_token), format_token(end_token)))
             return ranges
 
         if shell.conn.metadata.token_map is None or min_token is None:
@@ -782,7 +806,7 @@ class ExportTask(CopyTask):
                 ranges[(previous, end_token)] = first_range_data
 
         if not ranges:
-            shell.printerr('Found no ranges to query, check begin and end tokens: %s - %s' % (begin_token, end_token))
+            shell.printerr('Found no ranges to query, check begin and end tokens: %s - %s' % (format_token(begin_token), format_token(end_token)))
 
         return ranges
 
@@ -799,6 +823,8 @@ class ExportTask(CopyTask):
             return -1
         elif partitioner.endswith('Murmur3Partitioner'):
             return -(2 ** 63)   # Long.MIN_VALUE in Java
+        elif is_byte_token_partitioner(partitioner):
+            return b''   # byte string tokens (ByteOrderedPartitioner, Lexis): the empty string sorts first
         else:
             return None
 
@@ -1817,11 +1843,11 @@ class ExportProcess(ChildProcess):
         if start_token is not None or end_token is not None:
             query += ' WHERE'
         if start_token is not None:
-            query += ' token(%s) > %s' % (pk_cols, start_token)
+            query += ' token(%s) > %s' % (pk_cols, format_token(start_token))
         if start_token is not None and end_token is not None:
             query += ' AND'
         if end_token is not None:
-            query += ' token(%s) <= %s' % (pk_cols, end_token)
+            query += ' token(%s) <= %s' % (pk_cols, format_token(end_token))
         return query
 
 
@@ -2238,9 +2264,10 @@ class TokenMap(object):
     token classes. This is significant for large datasets because we need to do a bisect for each single row,
     and if VNODES are used, the size of the token map can get quite large too.
     """
-    def __init__(self, ks, hostname, local_dc, session):
+    def __init__(self, ks, hostname, local_dc, session, table=None):
 
         self.ks = ks
+        self.table = table
         self.hostname = hostname
         self.local_dc = local_dc
         self.metadata = session.cluster.metadata
@@ -2266,7 +2293,13 @@ class TokenMap(object):
 
         self.ring = [token.value for token in token_map.ring]
         self.replicas = [tuple(tokens_to_hosts[token]) for token in token_map.ring]
-        self.pk_to_token_value = lambda pk: from_key(pk).value
+        if getattr(token_map.token_class, 'needs_key_types', False):
+            # Lexis tokens encode the partition key with its column types.
+            token_for_key = self.metadata.token_for_key
+            ks, table = self.ks, self.table
+            self.pk_to_token_value = lambda pk: token_for_key(ks, table, pk).value
+        else:
+            self.pk_to_token_value = lambda pk: from_key(pk).value
 
     @staticmethod
     def get_ring_pos(ring, val):
@@ -2439,7 +2472,7 @@ class ImportProcess(ChildProcess):
             make_statement = self.wrap_make_statement(self.make_non_prepared_batch_statement)
 
         conv = ImportConversion(self, table_meta, prepared_statement)
-        tm = TokenMap(self.ks, self.hostname, self.local_dc, self.session)
+        tm = TokenMap(self.ks, self.hostname, self.local_dc, self.session, self.table)
         return query, conv, tm, make_statement
 
     def inner_run(self, query, conv, tm, make_statement):
